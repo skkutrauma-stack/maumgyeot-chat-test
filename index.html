@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>마음도사</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<!--
+  마음곁 챗봇 시험 페이지(chat-test1) — 2026-10-03, 외상심리건강연구소.
+  마음곁 앱 챗봇 화면(withmind_renewal src/screens/ChatScreen.tsx, components/ChatBubble·ChatInput)의
+  색·글꼴·말풍선 모양을 그대로 옮겼다. 앱의 챗봇 버튼이 이 페이지를 연다(?c=<대화 id>).
+
+  왜 http 인가: 연구소 Flowise 가 아직 http 라서, https 페이지에서 부르면 브라우저가 막는다(Mixed Content).
+  학교 443 개방·https 설정 후에는 https 로 옮긴다.
+  대화 id(c)는 마음곁 서버가 만든 무작위 값이라 이름·이메일 같은 개인정보가 아니다. 서버가 나중에
+  Flowise 대화 기록을 가져올 때 이 id 로 마음곁 참여자 기록과 잇는다.
+-->
+<style>
+  :root {
+    --bg: #FFF9FE; --surface: #FFFFFF; --surface-subtle: #F6F1FC; --border: #EDE4FA; --border-strong: #D8CAE9;
+    --text: #4A3550; --ink-strong: #3B2A40; --text-secondary: #6F5A76; --muted: #835699;
+    --accent: #7A63C8; --lavender: #A98BE8; --lavender-soft: #EDE4FA; --coral: #FF8A6B; --error: #C51700;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Noto Sans KR', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    display: flex; justify-content: center;
+  }
+  .app { width: 100%; max-width: 430px; height: 100dvh; display: flex; flex-direction: column; background: var(--bg); }
+  header { padding: 24px 20px 12px; }
+  h1 { margin: 0; font-size: 28px; line-height: 35px; font-weight: 400; color: var(--text); }
+  .messages { flex: 1; overflow-y: auto; padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 16px; }
+  .messages::before { content: ''; flex: 1; } /* 메시지는 아래부터 쌓인다 */
+  .row { max-width: 280px; display: flex; flex-direction: column; gap: 4px; }
+  .row.bot { align-self: flex-start; align-items: flex-start; }
+  .row.user { align-self: flex-end; align-items: flex-end; }
+  .sender { display: flex; align-items: center; gap: 8px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(90deg, var(--lavender), var(--coral)); }
+  .sender-name { font-size: 12px; line-height: 17px; font-weight: 500; color: var(--accent); }
+  .bubble { border-radius: 20px; padding: 14px; font-size: 14px; line-height: 21px; white-space: pre-wrap; word-break: break-word; }
+  .bot .bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; color: var(--text); }
+  .user .bubble { background: var(--lavender-soft); border-bottom-right-radius: 6px; color: var(--ink-strong); }
+  .time { font-size: 11px; line-height: 15px; font-weight: 500; color: var(--muted); }
+  .dots { display: inline-flex; gap: 6px; height: 21px; align-items: center; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--lavender); opacity: .35; animation: blink 1.2s infinite; }
+  .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .35 } 40% { opacity: 1 } }
+  .status { font-size: 12px; line-height: 17px; color: var(--text-secondary); }
+  .help { align-self: stretch; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); padding: 16px; }
+  .help p { margin: 0 0 12px; font-size: 14px; line-height: 21px; }
+  .help .lines { display: flex; gap: 8px; }
+  .help a { flex: 1; text-align: center; text-decoration: none; border-radius: 14px; padding: 12px 0; font-weight: 700; font-size: 15px;
+    background: linear-gradient(90deg, var(--lavender), var(--coral)); color: #fff; }
+  .bar { min-height: 56px; display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border-top: 1px solid var(--border);
+    padding: 8px 20px calc(8px + env(safe-area-inset-bottom)); }
+  textarea { flex: 1; resize: none; border: 0; outline: none; border-radius: 24px; background: var(--surface-subtle); color: var(--text);
+    font: inherit; font-size: 14px; line-height: 21px; padding: 12px 16px; min-height: 45px; max-height: 120px; }
+  textarea::placeholder { color: var(--muted); }
+  .send { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--border-strong); display: grid; place-items: center; cursor: pointer; flex: none; }
+  .send.on { background: var(--accent); }
+  .send svg { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header><h1>마음도사</h1></header>
+  <main class="messages" id="messages" aria-live="polite"></main>
+  <form class="bar" id="form">
+    <textarea id="input" rows="1" placeholder="마음도사에게 하고 싶은 말을 적어줘" aria-label="마음도사에게 보낼 말"></textarea>
+    <button class="send" id="send" type="submit" aria-label="보내기" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>
+    </button>
+  </form>
+</div>
+<script>
+  // 연구소 Flowise 챗플로우 "0711 챗봇 (라벨링)". 공유 주소와 같은 곳이다.
+  const FLOWISE = 'http://115.145.32.211:3001/api/v1/prediction/13e4ea82-8e8c-4b42-afc2-5f0ce479ea07';
+  const STAGES = {
+    startAgentflow_0: '말을 확인하고 있어.',
+    llmAgentflow_label: '대화의 맥락을 살펴보고 있어.',
+    customFunctionAgentflow_label: '대화의 맥락을 살펴보고 있어.',
+    customFunctionAgentflow_ragQuery: '도움이 될 자료를 찾아보고 있어.',
+    retrieverAgentflow_0: '도움이 될 자료를 살펴보고 있어.',
+    llmAgentflow_response: '답을 준비하고 있어.',
+  };
+  const ERROR_TEXT = '답이 중간에 끊겼어. 잠시 후 다시 보내줘.';
+
+  // 대화 id: 앱이 넘겨준 값(c), 없으면 이 브라우저에서 새로 만든다.
+  const params = new URLSearchParams(location.search);
+  const given = params.get('c');
+  const conversationId = /^[0-9a-f-]{36}$/i.test(given || '') ? given : crypto.randomUUID();
+
+  const $messages = document.getElementById('messages');
+  const $input = document.getElementById('input');
+  const $send = document.getElementById('send');
+  const $form = document.getElementById('form');
+  let busy = false;
+  let helpShown = false;
+
+  const time = () => new Intl.DateTimeFormat('ko-KR', { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date());
+  const scroll = () => { $messages.scrollTop = $messages.scrollHeight; };
+
+  function bubble(role, text) {
+    const row = document.createElement('div');
+    row.className = 'row ' + role;
+    if (role === 'bot') row.innerHTML = '<div class="sender"><span class="avatar"></span><span class="sender-name">마음도사</span></div>';
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.textContent = text;
+    const t = document.createElement('div');
+    t.className = 'time';
+    t.textContent = time();
+    row.append(b, t);
+    $messages.append(row);
+    scroll();
+    return b;
+  }
+
+  function typing() {
+    const row = document.createElement('div');
+    row.className = 'row bot';
+    row.innerHTML = '<div class="sender"><span class="avatar"></span><span class="sender-name">마음도사</span></div>' +
+      '<div class="bubble" aria-label="마음도사가 답을 쓰는 중"><span class="dots"><i></i><i></i><i></i></span></div><div class="status"></div>';
+    $messages.append(row);
+    scroll();
+    return row;
+  }
+
+  function showHelp() {
+    if (helpShown) return;
+    helpShown = true;
+    const card = document.createElement('div');
+    card.className = 'help';
+    card.innerHTML = '<p>지금 많이 힘들면 혼자 견디지 않아도 돼. 바로 이야기할 수 있는 곳이 있어.</p>' +
+      '<div class="lines"><a href="tel:109">109</a><a href="tel:1388">1388</a><a href="tel:119">119</a></div>';
+    $messages.append(card);
+    scroll();
+  }
+
+  // 화면에는 진행 문구·답 글자만. 라벨은 위험 신호를 알아챌 때만 쓰고 보여 주지 않는다.
+  function riskFrom(data) {
+    const node = Array.isArray(data) && data.find((n) => n && n.nodeId === 'customFunctionAgentflow_label');
+    const content = node && node.data && node.data.output && node.data.output.content;
+    if (typeof content !== 'string') return false;
+    try {
+      const l = JSON.parse(content);
+      return ['suicide_ambiguous', 'suicide_imminent'].includes(l.risk_level) ||
+        ['ambiguous', 'active', 'imminent'].includes(l.suicide_intent) ||
+        ['suicide', 'self_harm'].includes(l.chief_complaint);
+    } catch { return false; }
+  }
+
+  async function ask(question) {
+    busy = true; update();
+    bubble('user', question);
+    const pending = typing();
+    const status = pending.querySelector('.status');
+    let reply = null; let received = '';
+    const finish = (extra) => {
+      if (!reply) { pending.remove(); reply = bubble('bot', extra || ''); }
+      else if (extra) reply.textContent += '\n\n(' + extra + ')';
+      busy = false; update(); $input.focus();
+    };
+    try {
+      const res = await fetch(FLOWISE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ question, streaming: true, overrideConfig: { sessionId: conversationId } }),
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = ''; let done = false;
+      while (!done) {
+        const chunk = await reader.read();
+        buffer += chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true });
+        let i;
+        while ((i = buffer.search(/\r?\n\r?\n/)) >= 0) {
+          const frame = buffer.slice(0, i);
+          buffer = buffer.slice(i).replace(/^\r?\n\r?\n/, '');
+          const payload = frame.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trimStart()).join('\n');
+          if (!payload) continue;
+          if (payload === '[DONE]') { done = true; break; }
+          let ev; try { ev = JSON.parse(payload); } catch { continue; }
+          if (ev.event === 'agentFlowExecutedData' && riskFrom(ev.data)) showHelp();
+          else if (ev.event === 'nextAgentFlow' && !reply && ev.data && ev.data.status === 'INPROGRESS' && STAGES[ev.data.nodeId]) status.textContent = STAGES[ev.data.nodeId];
+          else if (ev.event === 'token' && typeof ev.data === 'string' && ev.data) {
+            if (!reply) { pending.remove(); reply = bubble('bot', ''); }
+            received += ev.data; reply.textContent = received; scroll();
+          } else if (ev.event === 'error' || (ev.event === 'agentFlowEvent' && ['ERROR', 'TERMINATED', 'TIMEOUT', 'STOPPED'].includes(ev.data))) {
+            throw new Error('flow ' + ev.event);
+          } else if (ev.event === 'end') { done = true; break; }
+        }
+        if (chunk.done) done = true;
+      }
+      if (!received) throw new Error('empty');
+      finish();
+    } catch (e) {
+      finish(received ? ERROR_TEXT : ERROR_TEXT);
+    }
+  }
+
+  function update() {
+    const can = !busy && $input.value.trim().length > 0;
+    $send.disabled = !can;
+    $send.classList.toggle('on', can);
+  }
+  $input.addEventListener('input', () => { $input.style.height = 'auto'; $input.style.height = Math.min($input.scrollHeight, 120) + 'px'; update(); });
+  $input.addEventListener('keydown', (e) => {
+    // 데스크톱: Enter 보내기, Shift+Enter 줄바꿈. 한글 조합 중에는 보내지 않는다.
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia('(min-width: 768px)').matches) {
+      e.preventDefault(); $form.requestSubmit();
+    }
+  });
+  $form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = $input.value.trim();
+    if (!q || busy || q.length > 2000) return;
+    $input.value = ''; $input.style.height = 'auto'; update();
+    ask(q);
+  });
+
+  bubble('bot', '안녕. 오늘은 어떤 마음이야?');
+  $input.focus();
+</script>
+</body>
+</html>
