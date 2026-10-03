@@ -55,6 +55,17 @@
   .help .lines { display: flex; gap: 8px; }
   .help a { flex: 1; text-align: center; text-decoration: none; border-radius: 14px; padding: 12px 0; font-weight: 700; font-size: 15px;
     background: linear-gradient(90deg, var(--lavender), var(--coral)); color: #fff; }
+  /* 챗봇이 "[ ] 우울 [ ] 불안" 같은 체크리스트를 보내면 글 대신 고를 수 있는 카드로 보여 준다. */
+  .choices { align-self: stretch; display: flex; flex-direction: column; gap: 10px; }
+  .choice-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .choice { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: 999px;
+    padding: 10px 16px; font: inherit; font-size: 14px; line-height: 20px; cursor: pointer; }
+  .choice.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+  .choice:disabled { cursor: default; opacity: .6; }
+  .choice-send { align-self: flex-end; border: 0; border-radius: 999px; padding: 10px 20px; font: inherit; font-size: 14px; font-weight: 700;
+    color: #fff; background: linear-gradient(90deg, var(--lavender), var(--coral)); cursor: pointer; }
+  .choice-send:disabled { background: var(--border-strong); cursor: default; }
+  .choice-hint { font-size: 12px; line-height: 17px; color: var(--text-secondary); }
   .bar { min-height: 56px; display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border-top: 1px solid var(--border);
     padding: 8px 20px calc(8px + env(safe-area-inset-bottom)); }
   textarea { flex: 1; resize: none; border: 0; outline: none; border-radius: 24px; background: var(--surface-subtle); color: var(--text);
@@ -141,6 +152,49 @@
     scroll();
   }
 
+  // "[ ] 우울 [ ] 불안" · "- [ ] 우울" · "□ 우울" 꼴의 체크리스트를 찾아 (본문, 보기 목록)으로 나눈다.
+  const CHECK = /(?:-\s*)?(?:\[\s?\]|□|☐)\s*([^\[\]□☐\n]+?)(?=\s*(?:-\s*)?(?:\[\s?\]|□|☐)|\n|$)/g;
+  function splitChecklist(text) {
+    const options = [];
+    let m;
+    CHECK.lastIndex = 0;
+    while ((m = CHECK.exec(text))) {
+      const o = m[1].trim().replace(/[.,]$/, '');
+      if (o && o.length <= 30 && !options.includes(o)) options.push(o);
+    }
+    if (options.length < 2) return { body: text, options: [] };
+    const body = text.replace(/(?:-\s*)?(?:\[\s?\]|□|☐)\s*[^\[\]□☐\n]+?(?=\s*(?:-\s*)?(?:\[\s?\]|□|☐)|\n|$)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    return { body, options };
+  }
+
+  function showChoices(options) {
+    const box = document.createElement('div');
+    box.className = 'choices';
+    box.innerHTML = '<div class="choice-hint">가까운 걸 골라줘. 여러 개 골라도 괜찮아.</div><div class="choice-grid"></div>';
+    const grid = box.querySelector('.choice-grid');
+    const picked = new Set();
+    const send = document.createElement('button');
+    send.className = 'choice-send'; send.type = 'button'; send.textContent = '골랐어'; send.disabled = true;
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'choice'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => {
+        if (picked.has(o)) picked.delete(o); else picked.add(o);
+        b.classList.toggle('on', picked.has(o)); b.setAttribute('aria-pressed', String(picked.has(o)));
+        send.disabled = picked.size === 0 || busy;
+      });
+      grid.append(b);
+    }
+    send.addEventListener('click', () => {
+      if (!picked.size || busy) return;
+      box.querySelectorAll('button').forEach((x) => (x.disabled = true));
+      ask([...picked].join(', '));
+    });
+    box.append(send);
+    $messages.append(box);
+    scroll();
+  }
+
   // 화면에는 진행 문구·답 글자만. 라벨은 위험 신호를 알아챌 때만 쓰고 보여 주지 않는다.
   function riskFrom(data) {
     const node = Array.isArray(data) && data.find((n) => n && n.nodeId === 'customFunctionAgentflow_label');
@@ -199,7 +253,9 @@
         if (chunk.done) done = true;
       }
       if (!received) throw new Error('empty');
-      finish();
+      const { body, options } = splitChecklist(received);
+      if (options.length) { reply.textContent = body || '가까운 걸 골라줘.'; finish(); showChoices(options); }
+      else finish();
     } catch (e) {
       finish(received ? ERROR_TEXT : ERROR_TEXT);
     }
