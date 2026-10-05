@@ -104,6 +104,8 @@
   const params = new URLSearchParams(location.search);
   const given = params.get('c');
   const conversationId = /^[0-9a-f-]{36}$/i.test(given || '') ? given : crypto.randomUUID();
+  // 연령대(g): 앱이 가입 정보로 정해 넘긴다(청소년 · 청년). 그 밖의 값이나 없으면 넘기지 않는다 — 챗봇은 호칭 없이 대한다.
+  const ageGroup = ['청소년', '청년'].includes(params.get('g')) ? params.get('g') : '';
 
   const $messages = document.getElementById('messages');
   const $input = document.getElementById('input');
@@ -223,7 +225,7 @@
       const res = await fetch(FLOWISE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({ question, streaming: true, overrideConfig: { sessionId: conversationId } }),
+        body: JSON.stringify({ question, streaming: true, overrideConfig: { sessionId: conversationId, vars: { ageGroup } } }),
         signal: AbortSignal.timeout(120000),
       });
       if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
